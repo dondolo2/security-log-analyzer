@@ -1,0 +1,10 @@
+[project]
+name = "security-log-analyzer"
+version = "0.1.0"
+description = "Defensive security log analyzer: parse, detect, alert, display."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
