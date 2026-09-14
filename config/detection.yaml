@@ -1,0 +1,28 @@
+# Detection thresholds. All thresholds are INCLUSIVE: "5" means "at least 5".
+# Tune these to change sensitivity without touching code.
+#
+# Why a config file and not constants in modules?
+# See docs/decisions.md — rules that can't be tuned are security theatre.
+
+brute_force:
+  # Alert when >= N failures for the same (username, ip) occur inside the window.
+  max_failed_logins: 5
+  time_window_minutes: 2
+  severity: HIGH
+
+account_attack:
+  # Alert when a single IP targets >= N distinct usernames inside the window.
+  max_distinct_usernames: 5
+  time_window_minutes: 5
+  severity: HIGH
+
+suspicious_login:
+  # Alert when a successful login follows >= N failures from the same IP
+  # within the lookback window.
+  #
+  # Note: keyed on IP, not (user, ip). A successful login after a burst
+  # from the same IP is the case we care about — the burst may have been
+  # aimed at other users.
+  failure_burst_threshold: 3
+  lookback_minutes: 5
+  severity: MEDIUM
