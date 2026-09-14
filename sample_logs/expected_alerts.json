@@ -1,0 +1,11 @@
+{
+  "_comment": "Ground truth. Hand-authored, not generated. Detection output must match this (comparing on alert_type, ip_address, username only).",
+  "brute_force.log": [
+    {"alert_type": "BRUTE_FORCE", "ip_address": "192.168.1.20", "username": "musa"}
+  ],
+  "account_attack.log": [
+    {"alert_type": "ACCOUNT_ATTACK", "ip_address": "10.0.0.5", "username": null}
+  ],
+  "normal.log": [],
+  "borderline.log": []
+}
