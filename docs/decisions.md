@@ -108,10 +108,44 @@ same IP at the same moment are two events, not a collision.V
 
 ---
 
-## Open questions (to resolve on later days)
+## 8. Open questions (to resolve on later days)
 
 - [ ] Should `suspicious_login` require the success within N seconds of
       the last failure, or only within the lookback window? (Day 8)
 - [ ] Dashboard: which two charts per tab? Keep it to two. (Day 9)
 - [ ] Docker: does the dashboard run in the same container as the CLI,
       or split? (Day 9-10)
+
+## 9. Why does the dashboard have no authentication, no filters, and no writes?
+
+Because it's a local demo, and pretending otherwise is a lie that costs
+real time. Auth would need a session store, a login flow, and a threat
+model for what a logged-out user can see — none of which the project
+needs, and all of which would be half-built in the time available.
+
+Filters are deferred to Day 8. The dashboard today answers one question:
+"what did the detector find?" A severity filter is a real improvement,
+but it's not on the critical path for a reviewer deciding whether the
+project is credible.
+
+The dashboard is read-only by construction. It opens SQLite in a context
+that only ever calls `read_sql_query`. No `INSERT`, no `UPDATE`, no DDL.
+The CLI is the sole writer.
+
+## 10. Why is `security_alerts.username` NOT NULL DEFAULT '' instead of nullable?
+
+Because SQLite treats NULL as DISTINCT inside UNIQUE constraints. If the
+column were nullable, the constraint
+`UNIQUE(alert_type, ip_address, username, first_seen)` would consider
+two rows with `username = NULL` to be distinct from each other, and a
+second run of the pipeline would insert a duplicate ACCOUNT_ATTACK
+alert rather than updating the existing one.
+
+`ACCOUNT_ATTACK` is the only rule that produces `username = None` — the
+subject is the IP, not any single user. Rather than special-case that
+one rule with a synthetic key column, the column is `NOT NULL DEFAULT ''`
+and empty string means "not applicable". The tradeoff is a small amount
+of semantic purity for a working constraint that doesn't require
+expression indexes or a hand-written key.
+
+Tested in `test_account_attack_alert_dedupes_despite_null_username`.

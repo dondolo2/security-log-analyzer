@@ -5,11 +5,10 @@ into structured events, runs configurable detection rules against those
 events, and surfaces alerts. Not an offensive tool. Not a SIEM. Not a
 log shipper. A focused detector with a small UI.
 
-> **Status:** Days 1–2 of a 9-day build complete. Parser and detection
-> engine are working and tested. Storage layer and Streamlit dashboard
-> land on Days 3–4; Docker Compose, CI, and demo assets on Day 4.
+> **Status:** Days 1–3 of a 9-day build complete. Parser, detection
+> engine, SQLite storage, and Streamlit dashboard are working and tested.
+> Docker Compose, CI, and demo assets land on Day 4.
 > See [Project status](#project-status) for details.
-
 ---
 
 ## 1. Project overview
@@ -434,7 +433,7 @@ Ordered by value, not by ambition:
 
 - [x] **Day 1** — scaffold, synthetic log generator, parser, parser tests.
 - [x] **Day 2** — detection engine, three rules, boundary tests, ground truth for all rules.
-- [ ] **Day 3** — SQLite storage (idempotent loads), Streamlit dashboard.
+- [x] **Day 3** — SQLite storage (idempotent loads), Streamlit dashboard.
 - [ ] **Day 4** — Docker + Compose, GitHub Actions CI, full README pass, demo assets.
 - [ ] **Days 5–9** — hardening, additional rule, second parser, performance, dashboard depth, buffer.
 
