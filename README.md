@@ -5,9 +5,11 @@ into structured events, runs configurable detection rules against those
 events, and surfaces alerts. Not an offensive tool. Not a SIEM. Not a
 log shipper. A focused detector with a small UI.
 
-> **Status:** Days 1–3 of a 9-day build complete. Parser, detection
-> engine, SQLite storage, and Streamlit dashboard are working and tested.
-> Docker Compose, CI, and demo assets land on Day 4.
+> **Status:** Days 1–4 of a 9-day build complete. Parser, detection
+> engine, SQLite storage, Streamlit dashboard, Docker Compose, and CI
+> are all in place. `docker compose up` runs the full pipeline and
+> serves the dashboard. Days 5–9 add depth (extra rule, second parser,
+> hardening, performance) without changing the shape of the system.
 > See [Project status](#project-status) for details.
 ---
 
@@ -163,47 +165,62 @@ security-log-analyzer/
 
 ## 6. How to run
 
-### Working today (Days 1–2: parser + detector)
+### One command (recommended)
 
 ```bash
 git clone <repo> && cd security-log-analyzer
+docker compose up
+```
+
+That's it. The `pipeline` service generates the synthetic logs, runs
+parser → detector → storage against them, and exits. The `dashboard`
+service waits for the pipeline to complete, then serves the UI at
+[http://localhost:8501](http://localhost:8501).
+
+To tear down including the database volume:
+
+```bash
+docker compose down -v
+```
+
+The `-v` matters. Without it, the named volume persists and the next
+`docker compose up` runs against the same database — which is fine, but
+if you want a genuinely clean slate you need `-v`.
+
+### Local (no Docker)
+
+If you'd rather run it against your host Python:
+
+```bash
 python -m venv .venv
 source .venv/bin/activate           # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+pip install -e .
 
-# 1. Generate the synthetic log files.
+# 1. Generate synthetic logs (deterministic, safe to rerun).
 python scripts/generate_sample_logs.py
 
-# 2. Run the detector end-to-end over them.
-python - <<'PY'
-from pathlib import Path
-from analyzer.detection.engine import load_config, run_detection
-from analyzer.parser.log_parser import parse_file
-
-config = load_config("config/detection.yaml")
-for log in sorted(Path("sample_logs").glob("*.log")):
-    events = parse_file(log)
-    alerts = run_detection(events, config)
-    print(f"{log.name}: {len(events)} events -> {len(alerts)} alert(s)")
-    for a in alerts:
-        print(f"  {a.alert_type} ip={a.ip_address} "
-              f"user={a.username} count={a.event_count}")
-PY
+# 2. Run the pipeline: parse → detect → store.
+python -m analyzer.run --reset
 
 # 3. Run the tests.
 pytest -q
+
+# 4. Open the dashboard.
+streamlit run dashboard/app.py
+# → http://localhost:8501
 ```
 
-### Target (Day 4 onward, once Docker lands)
+`--reset` clears the database before loading. Omit it to run
+idempotently against existing data — the pipeline will add nothing new
+if the logs haven't changed.
 
-```bash
-docker compose up
-# → runs the pipeline on sample_logs/, writes to the named volume,
-#   and serves the dashboard on http://localhost:8501
-```
+### Why both paths work the same
 
-**Until then, the local path above is the supported one.** The Docker
-setup is on the Day 4 task list, not a claim about the current state.
+The named volume in Docker and `data/` locally are separate. Docker
+writes to the volume; local runs write to `data/`. They don't collide,
+and neither path is a second-class citizen. See `docs/decisions.md §11`
+for the reasoning.
 
 ## 7. Example output
 
@@ -434,7 +451,7 @@ Ordered by value, not by ambition:
 - [x] **Day 1** — scaffold, synthetic log generator, parser, parser tests.
 - [x] **Day 2** — detection engine, three rules, boundary tests, ground truth for all rules.
 - [x] **Day 3** — SQLite storage (idempotent loads), Streamlit dashboard.
-- [ ] **Day 4** — Docker + Compose, GitHub Actions CI, full README pass, demo assets.
+- [x] **Day 4** — Docker + Compose, GitHub Actions CI, full README pass, demo assets.
 - [ ] **Days 5–9** — hardening, additional rule, second parser, performance, dashboard depth, buffer.
 
 ## Design decisions

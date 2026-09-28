@@ -149,3 +149,26 @@ of semantic purity for a working constraint that doesn't require
 expression indexes or a hand-written key.
 
 Tested in `test_account_attack_alert_dedupes_despite_null_username`.
+
+## 11. Why a Docker named volume and not a bind mount?
+
+A bind mount would put the database at `./data/security.db` — the same
+path a local (non-Docker) run uses. That means `docker compose up` and
+`python -m analyzer.run` would race on the same file, and whoever wrote
+last would win. The failure mode is silent: one of the two sees a
+partially-written database and reports wrong counts.
+
+A named volume keeps the two worlds apart. Docker has its own database,
+the developer has theirs, and neither can corrupt the other. The cost is
+one more `-v` flag to remember when tearing down. That's cheap.
+
+## 12. Why a two-version Python matrix in CI?
+
+`requires-python = ">=3.11"` in pyproject is a claim. A single CI job on
+3.11 verifies nothing about 3.12. The matrix costs a few seconds of CI
+time and turns the claim into a verified fact across the versions a
+reviewer is most likely to try.
+
+The failure this catches: someone (me, in three weeks) uses a 3.12-only
+feature in a rule, ships it, and a reviewer on 3.11 hits an ImportError.
+CI fails on the PR long before that happens.
