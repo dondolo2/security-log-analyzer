@@ -1,0 +1,38 @@
+services:
+
+  # One-shot: generate logs, run the pipeline, exit.
+  pipeline:
+    build: .
+    command:
+      - sh
+      - -c
+      - >
+        python scripts/generate_sample_logs.py &&
+        python -m analyzer.run --reset
+    volumes:
+      - analyzer-data:/app/data
+    environment:
+      DB_PATH: /app/data/security.db
+
+  # Long-running: serves the dashboard, waits for the pipeline to finish.
+  dashboard:
+    build: .
+    command:
+      - streamlit
+      - run
+      - dashboard/app.py
+      - --server.address=0.0.0.0
+      - --server.port=8501
+      - --server.headless=true
+    ports:
+      - "8501:8501"
+    volumes:
+      - analyzer-data:/app/data
+    environment:
+      DB_PATH: /app/data/security.db
+    depends_on:
+      pipeline:
+        condition: service_completed_successfully
+
+volumes:
+  analyzer-data:
