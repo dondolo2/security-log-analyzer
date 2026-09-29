@@ -1,17 +1,19 @@
 """End-to-end: generator -> parser -> detection -> storage, against ground truth.
 
-Two tests, both doing real work:
+Three tests:
 
 1. test_scenario_matches_ground_truth — parametrised over every scenario.
    Reads sample_logs/expected_alerts.json (hand-authored, committed before
    the detector existed) and asserts detection output matches it exactly.
-   If a rule's behaviour changes, this test fails and the diff shows which
-   scenario was affected.
 
 2. test_pipeline_is_idempotent_end_to_end — runs the full pipeline twice
    and asserts the database is byte-for-byte equivalent. The unit tests in
    test_storage.py check insert/upsert in isolation; this checks the whole
    loop, where a rule bug, a parser bug, or a storage bug could hide.
+
+3. test_ground_truth_covers_every_scenario — checks both directions:
+   every scenario has a ground-truth entry and vice versa. Guards against
+   the two files drifting out of sync.
 
 No network, no subprocess, no shell. Everything runs in tmp_path.
 """
@@ -52,6 +54,8 @@ def _expected_key(entry: dict) -> tuple[str, str, str]:
     return (entry["alert_type"], entry["ip_address"] or "", entry["username"] or "")
 
 
+# --- 1. per-scenario ground-truth check --------------------------------
+
 @pytest.mark.parametrize("filename", sorted(SCENARIOS.keys()))
 def test_scenario_matches_ground_truth(tmp_path: Path, filename: str):
     expected_all = json.loads(EXPECTED_PATH.read_text(encoding="utf-8"))
@@ -68,6 +72,8 @@ def test_scenario_matches_ground_truth(tmp_path: Path, filename: str):
         f"  actual:   {actual}"
     )
 
+
+# --- 2. pipeline idempotency -------------------------------------------
 
 def test_pipeline_is_idempotent_end_to_end(tmp_path: Path):
     logs_dir = tmp_path / "logs"
@@ -97,3 +103,29 @@ def test_pipeline_is_idempotent_end_to_end(tmp_path: Path):
     assert alerts_1 == alerts_2, "alert count changed on second run"
     assert new_1 == events_1, "first run should have inserted every event"
     assert new_2 == 0, "second run should have inserted nothing new"
+
+
+# --- 3. ground-truth / generator sync check ----------------------------
+
+def test_ground_truth_covers_every_scenario():
+    """Both directions must match.
+
+    The parametrised test iterates SCENARIOS, so a scenario absent from
+    expected_alerts.json is invisible — pytest simply doesn't collect it.
+    This test walks both sets and fails if either is missing an entry.
+    """
+    expected_all = json.loads(EXPECTED_PATH.read_text(encoding="utf-8"))
+    ground_truth_keys = {k for k in expected_all if not k.startswith("_")}
+    scenario_keys = set(SCENARIOS.keys())
+
+    missing_from_ground_truth = scenario_keys - ground_truth_keys
+    missing_from_generator = ground_truth_keys - scenario_keys
+
+    assert not missing_from_ground_truth, (
+        f"scenarios without ground-truth entries: "
+        f"{sorted(missing_from_ground_truth)}"
+    )
+    assert not missing_from_generator, (
+        f"ground-truth entries without scenarios: "
+        f"{sorted(missing_from_generator)}"
+    )

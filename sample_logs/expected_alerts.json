@@ -6,6 +6,9 @@
   "account_attack.log": [
     {"alert_type": "ACCOUNT_ATTACK", "ip_address": "10.0.0.5", "username": null}
   ],
+  "suspicious_login.log": [
+    {"alert_type": "SUSPICIOUS_LOGIN", "ip_address": "203.0.113.7", "username": "alice"}
+  ],
   "normal.log": [],
   "borderline.log": []
 }

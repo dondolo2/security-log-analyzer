@@ -39,6 +39,18 @@ def account_attack_scenario() -> list[str]:
         for i in range(10)
     ]
 
+def suspicious_login_scenario() -> list[str]:
+    """5 failures across 3 usernames, then a success from the same IP.
+
+    Ground truth: 1 SUSPICIOUS_LOGIN alert (no BRUTE_FORCE — 5 failures
+    spread across 3 usernames never reaches the (user, ip) threshold).
+    """
+    return [
+        _line(BASE_TIME + timedelta(seconds=0),  "LOGIN_FAILED", "alice", "203.0.113.7"),
+        _line(BASE_TIME + timedelta(seconds=10), "LOGIN_FAILED", "bob",   "203.0.113.7"),
+        _line(BASE_TIME + timedelta(seconds=20), "LOGIN_FAILED", "carol", "203.0.113.7"),
+        _line(BASE_TIME + timedelta(seconds=40), "LOGIN_SUCCESS", "alice", "203.0.113.7"),
+    ]
 
 def normal_traffic_scenario() -> list[str]:
     """Scattered failures and successes across different users/IPs -> 0 alerts."""
@@ -68,6 +80,7 @@ def borderline_scenario() -> list[str]:
 SCENARIOS = {
     "brute_force.log": brute_force_scenario,
     "account_attack.log": account_attack_scenario,
+    "suspicious_login.log": suspicious_login_scenario,
     "normal.log": normal_traffic_scenario,
     "borderline.log": borderline_scenario,
 }
