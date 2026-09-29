@@ -172,3 +172,24 @@ reviewer is most likely to try.
 The failure this catches: someone (me, in three weeks) uses a 3.12-only
 feature in a rule, ships it, and a reviewer on 3.11 hits an ImportError.
 CI fails on the PR long before that happens.
+
+## 13. Why pin direct deps and not the full freeze?
+
+The requirements.txt that landed on Day 4 was a `pip freeze` from an
+unrelated project. It listed packages this repo never imports (requests,
+urllib3, certifi) and omitted packages it does (pyyaml, pandas). The
+error only surfaced in Docker, because the local venv already had
+pyyaml installed from other work.
+
+Two lessons, both recorded here so they aren't relearned:
+
+1. `pip freeze > requirements.txt` is almost always wrong for an
+   application. It captures the transitive closure of whatever you've
+   pip-installed in this venv over its lifetime, including packages from
+   other projects. List direct dependencies by hand; let pip resolve the
+   graph.
+
+2. A claim of verification in a commit message must come *after* the
+   verification. The Day 4 Docker commit asserted the compose run worked
+   before it was ever run. The follow-up fix commit is honest about it.
+   Future commits: verify, then write the message.
