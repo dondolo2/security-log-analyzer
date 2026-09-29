@@ -142,7 +142,7 @@ def main() -> None:
                 "alert_type", "severity", "ip_address", "username",
                 "first_seen", "last_seen", "event_count",
             ]].sort_values("first_seen", ascending=False)
-            st.dataframe(display, use_container_width=True, hide_index=True)
+            st.dataframe(display, width="stretch", hide_index=True)
 
             with st.expander("Rule-specific details"):
                 for _, row in alerts.iterrows():
