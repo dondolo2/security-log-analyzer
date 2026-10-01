@@ -15,6 +15,11 @@ log shipper. A focused detector with a small UI.
 > full pipeline and serves the dashboard. See
 > [Project status](#project-status) for the commit-by-commit build.
 
+### Verification code:
+
+WTC-NDK5HJZA
+
+
 ---
 
 ## 1. Project overview
