@@ -5,12 +5,16 @@ into structured events, runs configurable detection rules against those
 events, and surfaces alerts. Not an offensive tool. Not a SIEM. Not a
 log shipper. A focused detector with a small UI.
 
-> **Status:** Days 1–4 of a 9-day build complete. Parser, detection
-> engine, SQLite storage, Streamlit dashboard, Docker Compose, and CI
-> are all in place. `docker compose up` runs the full pipeline and
-> serves the dashboard. Days 5–9 add depth (extra rule, second parser,
-> hardening, performance) without changing the shape of the system.
-> See [Project status](#project-status) for details.
+**[Watch the 5-minute demo on YouTube →](https://youtu.be/6Ci75062C9E)**
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+> **Status:** v1.0 — complete, tested, and running end-to-end. Parser,
+> detection engine, SQLite storage, Streamlit dashboard, Docker Compose,
+> and GitHub Actions CI are all in place. `docker compose up` runs the
+> full pipeline and serves the dashboard. See
+> [Project status](#project-status) for the commit-by-commit build.
+
 ---
 
 ## 1. Project overview
@@ -92,11 +96,10 @@ read the file.
    functions: `(events, rule_config) -> list[Alert]`.
 4. `Alert` objects are collected. If one rule raises, the others still
    run — logged at ERROR.
-5. *(Day 3)* Events and alerts are written to SQLite. Loads are
-   idempotent — running detection twice on the same log does not
-   duplicate alerts.
-6. *(Day 3)* The Streamlit dashboard reads both tables and shows
-   counts, charts, and an alert list.
+5. Events and alerts are written to SQLite. Loads are idempotent —
+   running detection twice on the same log does not duplicate anything.
+6. The Streamlit dashboard reads both tables and shows counts, charts,
+   and an alert list.
 
 ## 4. Technologies
 
@@ -110,8 +113,8 @@ read the file.
 | Dashboard | Streamlit | No frontend to build or maintain. |
 | Packaging | `pyproject.toml` + pytest `pythonpath` | Tests import without an installable package. |
 | Tests | `pytest` | Boundary cases as first-class tests. |
-| Containerisation | Docker + Compose | *(Day 4)* One command, no host Python required. |
-| CI | GitHub Actions | *(Day 4)* `pytest` on every push. |
+| Containerisation | Docker + Compose | One command, no host Python required. |
+| CI | GitHub Actions | `pytest` on every push, across Python 3.11 and 3.12. |
 
 ## 5. Project structure
 
@@ -119,11 +122,15 @@ read the file.
 security-log-analyzer/
 ├── README.md
 ├── requirements.txt
-├── pyproject.toml                 # pytest: pythonpath = ["src", "tests"]
+├── pyproject.toml                 # pytest: pythonpath = ["src", "tests", "scripts"]
+├── pyrightconfig.json             # IDE path config, mirrors pytest pythonpath
 ├── .gitignore
 ├── .env.example
-├── docker-compose.yml             # (Day 4)
-├── Dockerfile                     # (Day 4)
+├── docker-compose.yml
+├── Dockerfile
+├── .github/
+│   └── workflows/
+│       └── ci.yml                 # pytest on push and PR, 3.11 + 3.12
 ├── config/
 │   └── detection.yaml             # thresholds, not hardcoded
 ├── scripts/
@@ -144,23 +151,25 @@ security-log-analyzer/
 │       │   ├── brute_force.py
 │       │   ├── account_attack.py
 │       │   └── suspicious_login.py
-│       ├── storage/               # (Day 3)
+│       ├── storage/
 │       │   ├── __init__.py
 │       │   ├── db.py
 │       │   └── schema.sql
-│       └── run.py                 # (Day 3) CLI entrypoint
+│       └── run.py                 # CLI entrypoint
 ├── dashboard/
-│   └── app.py                     # (Day 3) Streamlit
+│   └── app.py                     # Streamlit
 ├── tests/
 │   ├── helpers.py                 # shared event constructors
 │   ├── test_parser.py
 │   ├── test_detection_brute_force.py
 │   ├── test_detection_account_attack.py
 │   ├── test_detection_suspicious_login.py
-│   └── test_detection_engine.py
+│   ├── test_detection_engine.py
+│   ├── test_storage.py
+│   └── test_end_to_end.py
 └── docs/
     ├── decisions.md               # every "why" answered
-    └── architecture.md            # (Day 4) longer-form diagram + notes
+    └── architecture.md            # longer-form diagram + notes
 ```
 
 ## 6. How to run
@@ -224,7 +233,7 @@ for the reasoning.
 
 ## 7. Example output
 
-Detector output over the four committed scenarios (this runs today):
+Detector output over the five committed scenarios:
 
 ```
 account_attack.log:   10 events -> 1 alert(s)
@@ -245,7 +254,7 @@ usernames, threshold is 5). It triggers exactly one rule, which is the
 one whose shape it matches. That's the detector behaving correctly, and
 it's asserted in `sample_logs/expected_alerts.json`.
 
-Once the storage layer lands (Day 3), an alert row in SQLite looks like:
+An alert row in SQLite looks like:
 
 ```
 id           = 1
@@ -337,16 +346,18 @@ Design notes:
 pytest -q
 ```
 
-**50 test cases across 5 files.** The ratio is deliberate — most tests
+**67 test cases across 7 files.** The ratio is deliberate — most tests
 probe a boundary or a rejection, not the happy path.
 
-| File | Focus |
-|---|---|
-| `test_parser.py` | 1 happy path, 12 rejection paths (missing fields, impossible dates, unknown events, ISO-format drift, trailing garbage), whitespace tolerance, raw-line preservation, file-level skip-and-count. |
-| `test_detection_brute_force.py` | Below threshold, at threshold, configurable threshold, failures spread beyond window, burst collapse, two separated bursts, split across IPs, split across users, successes ignored. |
-| `test_detection_account_attack.py` | Below/at threshold, repeated same-user attempts not counting as distinct, window boundary, per-IP independence, successes ignored. |
-| `test_detection_suspicious_login.py` | At/below threshold, lookback boundary, keyed-on-IP behaviour, the documented false positive, multiple successes. |
-| `test_detection_engine.py` | Empty input, rules run independently on shared input, missing config block skipped, a raising rule not blinding the others. |
+| File | Tests | Focus |
+|---|---|---|
+| `test_parser.py` | 19 | 1 happy path, 12 rejection paths (missing fields, impossible dates, unknown events, ISO-format drift, trailing garbage), whitespace tolerance, raw-line preservation, file-level skip-and-count. |
+| `test_detection_brute_force.py` | 11 | Below threshold, at threshold, configurable threshold, failures spread beyond window, burst collapse, two separated bursts, split across IPs, split across users, successes ignored. |
+| `test_detection_account_attack.py` | 7 | Below/at threshold, repeated same-user attempts not counting as distinct, window boundary, per-IP independence, successes ignored. |
+| `test_detection_suspicious_login.py` | 9 | At/below threshold, lookback boundary, keyed-on-IP behaviour, the documented false positive, multiple successes. |
+| `test_detection_engine.py` | 4 | Empty input, rules run independently on shared input, missing config block skipped, a raising rule not blinding the others. |
+| `test_storage.py` | 10 | Event dedupe, new-row count, alert upsert semantics, updates when a burst grows, the SQLite NULL-in-UNIQUE trap for `ACCOUNT_ATTACK`, two alert types on the same identity both landing, a later attack creating a new row, `reset()` clearing both tables. |
+| `test_end_to_end.py` | 7 | Ground-truth comparison for every scenario (parametrised), full-pipeline idempotency across two runs, and a two-direction coverage test that keeps `expected_alerts.json` and `SCENARIOS` in sync. |
 
 **What's covered conceptually:**
 
@@ -357,12 +368,15 @@ probe a boundary or a rejection, not the happy path.
 - Rule contracts (`pure`, `(events, config) -> list[Alert]`) are
   enforced by the tests themselves — no mocks needed.
 - The engine is tested for resilience, not just correctness.
+- Storage idempotency is tested at the unit level (insert/upsert) and
+  end-to-end (run the whole pipeline twice, assert the database is
+  unchanged).
+- The ground-truth file and the generator are checked in both
+  directions, so a scenario added to one but not the other fails loudly
+  rather than silently shrinking coverage.
 
-**What's not covered yet (Days 3–4):**
-
-- Storage idempotency (running the loader twice must not duplicate).
-- End-to-end pipeline test from log file to dashboard query.
-- Property-based fuzzing of the parser (planned Day 5).
+CI runs the full suite on every push and pull request, against Python
+3.11 and 3.12 — the two versions a reviewer is most likely to try.
 
 ## 10. Security considerations
 
@@ -381,9 +395,8 @@ one takes the following positions by design:
   by default. This is a demo, not a deployment. Adding auth would be
   scope creep that pretends the local demo is a production service.
 - **Parameterized SQL only.** All storage access goes through
-  parameterized queries. *(The storage layer itself lands Day 3; this
-  is a commitment for that implementation, recorded here so it's not
-  quietly dropped.)*
+  parameterized queries. `db.insert_events` and `db.upsert_alerts` are
+  the only write paths, and both use placeholders for every value.
 - **No offensive capability, no "attack mode".** The tool has no port
   scanning, no exploit code, no active probing. It is a reader.
 - **No external calls.** No threat-intel feeds, no GeoIP lookups, no
@@ -430,10 +443,10 @@ Ordered by value, not by ambition:
 2. **Distributed brute-force rule.** Aggregate failures *per user
    across IPs*, not per `(user, ip)`. Same shape as `brute_force`, but
    keyed differently.
-3. **Streaming ingestion.** Tail a growing log file instead of reading
-   it whole. Matters for real logs; not for this demo.
-4. **Second parser (JSON-lines).** Demonstrates the parser contract
+3. **Second parser (JSON-lines).** Demonstrates the parser contract
    actually generalises. Cheap to add, high signal.
+4. **Streaming ingestion.** Tail a growing log file instead of reading
+   it whole. Matters for real logs; not for this demo.
 5. **Alert deduplication by burst ID.** Currently each success in the
    lookback window of a burst gets its own `suspicious_login` alert.
    A `burst_id` on the alert would let the dashboard group them. This
@@ -441,8 +454,9 @@ Ordered by value, not by ambition:
    current behaviour.
 6. **Pluggable storage backend.** Postgres/SQLite behind one interface.
    Would need a real reason (concurrency, retention); not yet.
-7. **Property-based fuzzing of the parser** with `hypothesis`. Planned
-   for Day 5 of the current build.
+7. **Property-based fuzzing of the parser** with `hypothesis`. The
+   parser's contract (`dict | None`, never raises) is exactly the shape
+   property tests are good at verifying.
 
 ---
 
@@ -451,11 +465,18 @@ Ordered by value, not by ambition:
 - [x] **Day 1** — scaffold, synthetic log generator, parser, parser tests.
 - [x] **Day 2** — detection engine, three rules, boundary tests, ground truth for all rules.
 - [x] **Day 3** — SQLite storage (idempotent loads), Streamlit dashboard.
-- [x] **Day 4** — Docker + Compose, GitHub Actions CI, full README pass, demo assets.
-- [ ] **Days 5–9** — hardening, additional rule, second parser, performance, dashboard depth, buffer.
+- [x] **Day 4** — Docker + Compose, GitHub Actions CI, end-to-end ground-truth test, full README pass.
 
 ## Design decisions
 
 Every non-trivial choice has a written rationale in
 [`docs/decisions.md`](docs/decisions.md). If you're a reviewer and have
 a "why this design?" question, that file is the answer.
+
+## Demo
+
+[Watch the 5-minute walkthrough on YouTube →](https://youtu.be/6Ci75062C9E)
+
+The demo runs `docker compose up`, walks the pipeline output, shows the
+dashboard, and explains the detection rules and the reasoning behind
+the config-driven threshold design.
