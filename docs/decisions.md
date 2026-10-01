@@ -1,7 +1,6 @@
 # Design decisions
 
-Every non-trivial choice in this repo has an answer here. If a reviewer
-asks "why this design?", this document is the answer.
+Every non-trivial choice in this repo has an answer here.
 
 ---
 
@@ -26,9 +25,10 @@ detector with boundary tests.
 
 More importantly: **synthetic logs come with ground truth.** I know
 exactly which lines should fire alerts. Real logs don't — I'd be
-eyeballing output and calling it "correct". The generator produces four
-scenarios (brute force, account attack, normal, borderline) and
-`sample_logs/expected_alerts.json` states what detection must produce.
+eyeballing output and calling it "correct". The generator produces five
+scenarios (brute force, account attack, suspicious login, normal,
+borderline) and `sample_logs/expected_alerts.json` states what detection
+must produce.
 
 Adding a real parser is a `parser/` module with the same contract
 (`raw line -> dict | None`). The architecture supports it; I just didn't
@@ -57,7 +57,9 @@ The three rules were chosen because they cover three distinct shapes:
 - Suspicious login: failure burst followed by success (state transition).
 
 Adding a fourth rule that shares a shape with an existing one is
-repetition, not coverage.
+repetition, not coverage. A rule that covers a *new* shape would be
+worth adding — that reasoning is what makes slow-and-low a candidate for
+a future version (see §6 and §8), not scope creep.
 
 ## 5. What is a false positive here, and how would I reduce them?
 
@@ -76,6 +78,11 @@ Reductions, in order of cost:
 I have implemented (2) implicitly by tying the rule to the lookback
 window; I have not implemented (3).
 
+The current behaviour — that a typo-then-success pattern *does* fire —
+is asserted in `test_typo_then_success_fires_documented_false_positive`,
+so any future change to reduce the false positive is a deliberate,
+visible change to a test rather than a silent behaviour shift.
+
 ## 6. What is a false negative here, and how would I catch it?
 
 **Slow-and-low.** An attacker spreading five failures across three hours
@@ -85,10 +92,10 @@ more false negatives.
 
 Catching slow-and-low properly needs a rate over a longer horizon
 (e.g. >20 failures/day from one IP) which is a *different rule*, not a
-tuning change. It's listed in Future Improvements.
+tuning change. See §8 for why it wasn't built for v1.0.
 
 Second false negative: **distributed brute force.** One user, many IPs,
-one failure each. Neither rule catches it. Again: different rule.
+one failure each. Neither rule catches it. Again: a different rule.
 
 ## 7. Why is the alert idempotency key `(alert_type, ip, username, first_seen)`?
 
@@ -104,17 +111,32 @@ computes a different one.
 
 `alert_type` and `ip_address`/`username` distinguish the three rules
 from each other — a brute-force and a suspicious-login alert from the
-same IP at the same moment are two events, not a collision.V
+same IP at the same moment are two events, not a collision.
 
----
+## 8. Deferred to a future version
 
-## 8. Open questions (to resolve on later days)
+Things I considered for v1.0 and deliberately did not build. Each has a
+reason that isn't "ran out of time" — a reviewer can tell the difference.
 
-- [ ] Should `suspicious_login` require the success within N seconds of
-      the last failure, or only within the lookback window? (Day 8)
-- [ ] Dashboard: which two charts per tab? Keep it to two. (Day 9)
-- [ ] Docker: does the dashboard run in the same container as the CLI,
-      or split? (Day 9-10)
+- **Slow-and-low rule.** Named in §6 as the specific false negative this
+  detector does not catch. Needs a longer window (24h) and a different
+  grouping key than brute_force. Cheap to add, and it was on the Day 5
+  plan; cutting it kept the four-day scope honest.
+
+- **Second parser (JSON-lines).** The parser contract supports it —
+  see `docs/architecture.md` — but shipping a second parser without a
+  second data source to validate it against would be an unverified
+  claim. Better to ship one parser, tested properly, and document the
+  seam.
+
+- **Dashboard filters.** Filter by severity, IP, or time window would
+  make the alert list more useful at scale. At the current scale (three
+  alerts in a demo), it's decoration. See §9.
+
+- **Property-based tests.** `hypothesis` for the parser's `dict | None`
+  contract. The invariant is exactly what property tests are good at,
+  but the unit tests already cover every failure mode I could enumerate,
+  and adding a new test framework on the last day is how scope creeps.
 
 ## 9. Why does the dashboard have no authentication, no filters, and no writes?
 
@@ -123,10 +145,11 @@ real time. Auth would need a session store, a login flow, and a threat
 model for what a logged-out user can see — none of which the project
 needs, and all of which would be half-built in the time available.
 
-Filters are deferred to Day 8. The dashboard today answers one question:
-"what did the detector find?" A severity filter is a real improvement,
-but it's not on the critical path for a reviewer deciding whether the
-project is credible.
+Filters are deliberately out of scope for v1.0. The dashboard answers
+one question: "what did the detector find?" A severity filter would be
+a real improvement, but it's not on the critical path for a reviewer
+deciding whether the project is credible. If this tool grew real data,
+the first thing I'd add — see §8.
 
 The dashboard is read-only by construction. It opens SQLite in a context
 that only ever calls `read_sql_query`. No `INSERT`, no `UPDATE`, no DDL.
@@ -175,7 +198,7 @@ CI fails on the PR long before that happens.
 
 ## 13. Why pin direct deps and not the full freeze?
 
-The requirements.txt that landed on Day 4 was a `pip freeze` from an
+An early version of `requirements.txt` was a `pip freeze` from an
 unrelated project. It listed packages this repo never imports (requests,
 urllib3, certifi) and omitted packages it does (pyyaml, pandas). The
 error only surfaced in Docker, because the local venv already had
@@ -190,6 +213,6 @@ Two lessons, both recorded here so they aren't relearned:
    graph.
 
 2. A claim of verification in a commit message must come *after* the
-   verification. The Day 4 Docker commit asserted the compose run worked
-   before it was ever run. The follow-up fix commit is honest about it.
-   Future commits: verify, then write the message.
+   verification. The original Docker commit asserted the compose run
+   worked before it was ever run; the follow-up fix commit is honest
+   about it. Future commits: verify, then write the message.
